@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import React from "react";
+import { ToastProvider } from "../components/Toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="ja">
+      <body className="min-h-dvh bg-white text-gray-900 antialiased">
+        <ToastProvider>{children}</ToastProvider>
+        {/* Toast のポータル先（SSR で常設して hydration 差分をなくす） */}
+        <div id="toast-root" />
       </body>
     </html>
   );
