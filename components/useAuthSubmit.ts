@@ -25,7 +25,8 @@ export function useAuthSubmit() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       toastError("ログインに失敗しました", formatAuthError(error));
-      return { ok: false as const, data: null as typeof data };
+      // SupabaseのAuthレスポンスdataは「オブジェクト」。nullではなく空オブジェクト形で返す
+      return { ok: false as const, data: { user: null, session: null, weakPassword: null } };
     }
     router.push("/memos");
     return { ok: true as const, data };
@@ -42,7 +43,8 @@ export function useAuthSubmit() {
     });
     if (error) {
       toastError("サインアップに失敗しました", formatAuthError(error));
-      return { ok: false as const, data: null as typeof data };
+      // 同上：失敗時もオブジェクト形で返す
+      return { ok: false as const, data: { user: null, session: null, weakPassword: null } };
     }
     success("確認メールを送信しました");
     return { ok: true as const, data };
