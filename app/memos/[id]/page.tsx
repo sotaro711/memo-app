@@ -5,6 +5,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import AutoSaveIndicator from '@/components/AutoSaveIndicator';
+import DeleteButton from '@/components/DeleteButton';
+import { useToast } from '@/components/Toast';
+
+// Supabaseのエラーを人間が読める文字列に整形
+function formatSupabaseError(e: unknown): string {
+  if (!e) return '不明なエラー';
+  if (e instanceof Error && e.message) return e.message;
+  if (typeof e === 'string') return e;
+  try {
+    const any = e as any;
+    const parts = [any?.message, any?.code, any?.details, any?.hint]
+      .filter(Boolean)
+      .map(String);
+    if (parts.length) return parts.join(' | ');
+    return JSON.stringify(any);
+  } catch {
+    return String(e);
+  }
+}
 
 type MemoRow = {
   id: string;
@@ -18,6 +37,7 @@ export default function MemoEditPage({ params }: { params: Promise<{ id: string 
   // Next.js 15: params は Promise。React.use() で unwrap
   const { id } = use(params);
   const router = useRouter();
+  const { error: toastError } = useToast();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -38,8 +58,15 @@ export default function MemoEditPage({ params }: { params: Promise<{ id: string 
         .single<MemoRow>();
       if (!active) return;
       if (error) {
-        console.error(error);
+        // 開発用に構造化してログ出力（Next DevToolsで { code, message, ... } が見える）
+        console.error('[memos/[id]] load error:', {
+          code: (error as any)?.code,
+          message: (error as any)?.message,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+        });
         setStatus('error');
+        toastError('メモの読み込みに失敗しました', formatSupabaseError(error));
         return;
       }
       setTitle(data?.title ?? '');
@@ -61,8 +88,14 @@ export default function MemoEditPage({ params }: { params: Promise<{ id: string 
     saveTimerRef.current = setTimeout(async () => {
       const { error } = await supabase.from('memos').update({ title, content }).eq('id', id);
       if (error) {
-        console.error(error);
+        console.error('[memos/[id]] save error:', {
+          code: (error as any)?.code,
+          message: (error as any)?.message,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+        });
         setStatus('error');
+        toastError('保存に失敗しました', formatSupabaseError(error));
       } else {
         setStatus('saved');
         setLastSavedAt(new Date());
@@ -74,17 +107,7 @@ export default function MemoEditPage({ params }: { params: Promise<{ id: string 
     };
   }, [title, content, id, loaded]);
 
-  const handleDelete = async () => {
-    const ok = window.confirm('このメモを削除しますか？');
-    if (!ok) return;
-    const { error } = await supabase.from('memos').delete().eq('id', id);
-    if (error) {
-      alert('削除に失敗しました');
-      console.error(error);
-      return;
-    }
-    router.push('/memos');
-  };
+  // 削除処理は <DeleteButton /> に委譲（確認ダイアログ＋トースト＋遷移を内包）
 
   const headerTitle = useMemo(() => (title?.trim() ? title : '無題のメモ'), [title]);
 
@@ -122,12 +145,10 @@ export default function MemoEditPage({ params }: { params: Promise<{ id: string 
         >
           ← 一覧へ
         </button>
-        <button
-          onClick={handleDelete}
+        <DeleteButton
+          memoId={id}
           className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-        >
-          削除
-        </button>
+        />
       </div>
     </div>
   );

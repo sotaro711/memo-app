@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import SearchBar from '@/components/SearchBar';
+import { useToast } from '@/components/Toast';
 
 type MemoListItem = {
   id: string;
@@ -13,32 +14,37 @@ type MemoListItem = {
 };
 
 export default function MemosPage() {
+  const { error: toastError } = useToast();
   const [query, setQuery] = useState('');
   const [memos, setMemos] = useState<MemoListItem[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchMemos = async (q: string) => {
     setLoading(true);
-    // タイトル or 本文に部分一致（大文字小文字無視）
-    // Supabaseの or フィルタはカンマ区切りで条件を列挙
-    const like = `%${q.replace(/%/g, '').replace(/_/g, '')}%`;
-    let req = supabase
-      .from('memos')
-      .select('id,title,content,updated_at')
-      .order('updated_at', { ascending: false });
+    try {
+      // タイトル or 本文に部分一致（大文字小文字無視）
+      // Supabaseの or フィルタはカンマ区切りで条件を列挙
+      const like = `%${q.replace(/%/g, '').replace(/_/g, '')}%`;
+      let req = supabase
+        .from('memos')
+        .select('id,title,content,updated_at')
+        .order('updated_at', { ascending: false });
 
-    if (q) {
-      req = req.or(`title.ilike.${like},content.ilike.${like}`);
-    }
+      if (q) {
+        req = req.or(`title.ilike.${like},content.ilike.${like}`);
+      }
 
-    const { data, error } = await req;
-    if (error) {
-      console.error(error);
-      setMemos([]);
-    } else {
+      const { data, error } = await req;
+      if (error) throw error;
       setMemos(data ?? []);
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : undefined;
+      toastError('メモの取得に失敗しました', msg);
+      setMemos([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -67,6 +73,9 @@ export default function MemosPage() {
           <p className="mt-2 text-sm text-gray-500">
             検索キーワード: <span className="font-medium">{query}</span>
           </p>
+        )}
+        {!loading && memos && (
+          <p className="mt-1 text-xs text-gray-500">{memos.length}件</p>
         )}
       </div>
 
