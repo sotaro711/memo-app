@@ -1,155 +1,120 @@
-'use client';
+"use client";
+import { use as usePromise, useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
+import Link from "next/link";
+import { type PostgrestError } from "@supabase/supabase-js";
+import { toastError } from "@/components/Toast";
+import { supabase } from "@/lib/supabaseClient";
+import DeleteButton from "@/components/DeleteButton";
 
-import { use } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
-import AutoSaveIndicator from '@/components/AutoSaveIndicator';
-import DeleteButton from '@/components/DeleteButton';
-import { useToast } from '@/components/Toast';
-
-// Supabaseのエラーを人間が読める文字列に整形
-function formatSupabaseError(e: unknown): string {
-  if (!e) return '不明なエラー';
-  if (e instanceof Error && e.message) return e.message;
-  if (typeof e === 'string') return e;
-  try {
-    const any = e as any;
-    const parts = [any?.message, any?.code, any?.details, any?.hint]
-      .filter(Boolean)
-      .map(String);
-    if (parts.length) return parts.join(' | ');
-    return JSON.stringify(any);
-  } catch {
-    return String(e);
-  }
-}
-
-type MemoRow = {
+type Memo = {
   id: string;
   title: string | null;
   content: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
 };
 
+function formatSupabaseError(err: unknown): string {
+  const e = err as Partial<PostgrestError> | undefined;
+  const parts = [e?.code, e?.message, e?.details, e?.hint].filter(Boolean);
+  return parts.length ? parts.join(" / ") : String(err);
+}
+
+// Next.js 15: params は Promise なので use(params) で取り出す
 export default function MemoEditPage({ params }: { params: Promise<{ id: string }> }) {
-  // Next.js 15: params は Promise。React.use() で unwrap
-  const { id } = use(params);
-  const router = useRouter();
-  const { error: toastError } = useToast();
+  const { id } = usePromise(params);
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [title, setTitle] = useState<string>("");
+  const [content, setContent] = useState<string>("");
+  const [createdAt, setCreatedAt] = useState<string>("");
+  const [updatedAt, setUpdatedAt] = useState<string>("");
 
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false); // 日付表示のHydration対策
+
+  const onTitleChange = (e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value);
+  const onContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value);
 
   // 初期読み込み
   useEffect(() => {
-    let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from('memos')
-        .select('id,title,content,updated_at')
-        .eq('id', id)
-        .single<MemoRow>();
-      if (!active) return;
-      if (error) {
-        // 開発用に構造化してログ出力（Next DevToolsで { code, message, ... } が見える）
-        console.error('[memos/[id]] load error:', {
-          code: (error as any)?.code,
-          message: (error as any)?.message,
-          details: (error as any)?.details,
-          hint: (error as any)?.hint,
-        });
-        setStatus('error');
-        toastError('メモの読み込みに失敗しました', formatSupabaseError(error));
-        return;
+      try {
+        const { data, error } = await supabase
+          .from("memos")
+          .select("id,title,content,created_at,updated_at")
+          .eq("id", id)
+          .single<Pick<Memo, "id" | "title" | "content" | "created_at" | "updated_at">>();
+        if (error) throw error;
+        if (data) {
+          setTitle(data.title ?? "");
+          setContent(data.content ?? "");
+          setCreatedAt(data.created_at);
+          setUpdatedAt(data.updated_at);
+        }
+      } catch (e: unknown) {
+        toastError("メモの読み込みに失敗しました", formatSupabaseError(e));
       }
-      setTitle(data?.title ?? '');
-      setContent(data?.content ?? '');
-      setLoaded(true);
-      setStatus('idle');
     })();
-    return () => {
-      active = false;
-    };
+    // `toastError` は外部の安定関数なので依存不要
   }, [id]);
 
-  // デバウンス付きオートセーブ（1秒）
-  useEffect(() => {
-    if (!loaded) return;
+  // Hydration差分を避ける：マウント後のみローカル時刻に変換
+  useEffect(() => setMounted(true), []);
 
-    setStatus('saving');
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from('memos').update({ title, content }).eq('id', id);
-      if (error) {
-        console.error('[memos/[id]] save error:', {
-          code: (error as any)?.code,
-          message: (error as any)?.message,
-          details: (error as any)?.details,
-          hint: (error as any)?.hint,
-        });
-        setStatus('error');
-        toastError('保存に失敗しました', formatSupabaseError(error));
-      } else {
-        setStatus('saved');
-        setLastSavedAt(new Date());
+  // オートセーブ
+  useEffect(() => {
+    if (!id) return;
+    const h = setTimeout(async () => {
+      try {
+        setSaving(true);
+        const { error } = await supabase.from("memos").update({ title, content }).eq("id", id);
+        if (error) throw error;
+      } catch (e: unknown) {
+        toastError("保存に失敗しました", formatSupabaseError(e));
+      } finally {
+        setSaving(false);
       }
     }, 1000);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [title, content, id, loaded]);
-
-  // 削除処理は <DeleteButton /> に委譲（確認ダイアログ＋トースト＋遷移を内包）
-
-  const headerTitle = useMemo(() => (title?.trim() ? title : '無題のメモ'), [title]);
+    return () => clearTimeout(h);
+    // `toastError` は外部の安定関数なので依存不要
+  }, [id, title, content]);
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{headerTitle}</h1>
-        <AutoSaveIndicator status={status} lastSavedAt={lastSavedAt} />
-      </div>
-
-      <div className="mb-3">
-        <label className="mb-1 block text-sm text-gray-600">タイトル</label>
-        <input
-          className="w-full rounded-xl border p-3 outline-none focus:ring"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="タイトルを入力"
-        />
-      </div>
-
-      <div className="mb-6">
-        <label className="mb-1 block text-sm text-gray-600">本文</label>
-        <textarea
-          className="h-[50vh] w-full rounded-xl border p-3 outline-none focus:ring"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="本文を入力"
-        />
-      </div>
-
+    <main className="mx-auto max-w-3xl p-4 space-y-5">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => router.push('/memos')}
-          className="rounded-xl border px-4 py-2 hover:bg-gray-50"
-        >
-          ← 一覧へ
-        </button>
-        <DeleteButton
-          memoId={id}
-          className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-        />
+        <div className="flex items-center gap-3">
+          <Link href="/memos" className="text-sm underline hover:opacity-80">
+            ← メモ一覧へ戻る
+          </Link>
+          <h1 className="text-xl font-semibold">メモ編集</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          {saving ? <span className="text-sm opacity-70">保存中...</span> : null}
+          <DeleteButton memoId={id} />
+        </div>
       </div>
-    </div>
+
+      <p className="text-sm text-slate-500">
+        作成: <span className="ml-1">{createdAt ? (mounted ? new Date(createdAt).toLocaleString() : createdAt) : "-"}</span>
+        <span className="mx-2">/</span>
+        最終更新:{" "}
+        <span className="ml-1">{updatedAt ? (mounted ? new Date(updatedAt).toLocaleString() : updatedAt) : "-"}</span>
+      </p>
+
+      <input
+        className="w-full rounded-lg border p-3"
+        placeholder="タイトル"
+        value={title}
+        onChange={onTitleChange}
+      />
+      <textarea
+        className="w-full h-72 rounded-lg border p-3"
+        placeholder="内容"
+        value={content}
+        onChange={onContentChange}
+      />
+    </main>
   );
 }

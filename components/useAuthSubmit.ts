@@ -1,54 +1,28 @@
-"use client";
+// components/useAuthSubmit.ts
+import { useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
-import { useToast } from "@/components/Toast";
+import { toastError } from "@/components/Toast";
 
-function pick(obj: unknown, key: string): unknown {
-  if (!obj || typeof obj !== "object") return undefined;
-  return (obj as Record<string, unknown>)[key];
-}
-function formatAuthError(e: unknown): string {
-  if (!e) return "不明なエラー";
-  if (e instanceof Error && e.message) return e.message;
-  if (typeof e === "string") return e;
-  const parts = ["message", "code", "details", "hint"]
-    .map((k) => pick(e, k))
-    .filter((v): v is string => typeof v === "string");
-  return parts.length ? parts.join(" | ") : JSON.stringify(e);
-}
+type AuthData = { user: unknown | null; session: unknown | null };
 
 export function useAuthSubmit() {
-  const router = useRouter();
-  const { error: toastError, success } = useToast();
-
-  async function signIn(email: string, password: string) {
+  const signIn = useCallback(async (email: string, password: string): Promise<AuthData> => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      toastError("ログインに失敗しました", formatAuthError(error));
-      // SupabaseのAuthレスポンスdataは「オブジェクト」。nullではなく空オブジェクト形で返す
-      return { ok: false as const, data: { user: null, session: null, weakPassword: null } };
+      toastError("ログインに失敗しました", error.message);
+      return { user: null, session: null };
     }
-    router.push("/memos");
-    return { ok: true as const, data };
-  }
+    return { user: data.user ?? null, session: data.session ?? null };
+  }, []);
 
-  async function signUp(email: string, password: string) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo:
-          typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
-      },
-    });
+  const signUp = useCallback(async (email: string, password: string): Promise<AuthData> => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
-      toastError("サインアップに失敗しました", formatAuthError(error));
-      // 同上：失敗時もオブジェクト形で返す
-      return { ok: false as const, data: { user: null, session: null, weakPassword: null } };
+      toastError("サインアップに失敗しました", error.message);
+      return { user: null, session: null };
     }
-    success("確認メールを送信しました");
-    return { ok: true as const, data };
-  }
+    return { user: data.user ?? null, session: data.session ?? null };
+  }, []);
 
   return { signIn, signUp };
 }

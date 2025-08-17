@@ -1,5 +1,6 @@
+// app/memos/error.tsx
 "use client";
-import React from "react";
+import Link from "next/link";
 
 export default function MemosError({
   error,
@@ -8,26 +9,17 @@ export default function MemosError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // Toast は ToastGlobalEvents で一元管理（ここでは重複させない）
-  // eslint-disable-next-line no-console
-  console.error(error);
-
   return (
-    <div className="p-6 space-y-4">
-      <h2 className="text-xl font-semibold">メモの読み込みに失敗しました</h2>
-      <div className="flex gap-3">
-        <button
-          onClick={reset}
-          className="rounded-xl border px-4 py-2 hover:bg-gray-50"
-        >
+    <div className="mx-auto max-w-lg p-6 space-y-4">
+      <h2 className="text-xl font-semibold">メモ画面でエラーが発生しました</h2>
+      <p className="text-sm text-slate-600">{error?.message ?? "Unknown error"}</p>
+      <div className="flex items-center gap-3">
+        <button onClick={() => reset()} className="rounded bg-blue-600 px-4 py-2 text-white">
           再試行
         </button>
-        <a
-          href="/memos"
-          className="rounded-xl border px-4 py-2 hover:bg-gray-50"
-        >
+        <Link href="/memos" className="underline">
           一覧へ戻る
-        </a>
+        </Link>
       </div>
     </div>
   );

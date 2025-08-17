@@ -1,37 +1,35 @@
 "use client";
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { useToast } from "@/components/Toast";
+import { toastError, toastSuccess } from "@/components/Toast";
 
-export default function DeleteButton({ memoId, className }: { memoId: string; className?: string }) {
+export default function DeleteButton({
+  memoId,
+  className = "",
+}: { memoId: string; className?: string }) {
   const router = useRouter();
-  const { success, error } = useToast();
-  const [deleting, setDeleting] = useState(false);
 
-  async function onDelete() {
-    if (deleting) return;
-    if (!confirm("このメモを削除します。よろしいですか？")) return;
-    setDeleting(true);
+  const onClick = async () => {
+    const ok = window.confirm("このメモを削除します。よろしいですか？");
+    if (!ok) return;
     try {
-      const { error: e } = await supabase.from("memos").delete().eq("id", memoId);
-      if (e) throw e;
-      success("削除しました");
+      const { error } = await supabase.from("memos").delete().eq("id", memoId);
+      if (error) throw error;
+      toastSuccess("削除しました");
       router.push("/memos");
     } catch (e: unknown) {
-      error("削除に失敗しました", e instanceof Error ? e.message : undefined);
-    } finally {
-      setDeleting(false);
+      const msg = e instanceof Error ? e.message : String(e);
+      toastError("削除に失敗しました", msg);
     }
-  }
+  };
 
   return (
     <button
-      onClick={onDelete}
-      disabled={deleting}
-      className={className ?? "rounded-xl border px-4 py-2 hover:bg-gray-50 disabled:opacity-50"}
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-2 hover:bg-gray-50 ${className}`}
     >
-      {deleting ? "削除中..." : "削除"}
+      削除
     </button>
   );
 }

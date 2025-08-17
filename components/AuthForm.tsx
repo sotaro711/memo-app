@@ -1,92 +1,77 @@
-/* eslint-disable react/button-has-type */
+// components/AuthForm.tsx
 "use client";
-import React, { FormEvent, useState } from "react";
-// 同じフォルダ内の相対パスに変更して解決を安定化
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthSubmit } from "./useAuthSubmit";
+import { toastInfo, toastSuccess } from "./Toast";
 
 export default function AuthForm() {
   const { signIn, signUp } = useAuthSubmit();
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
+    if (loading) return;
+    setLoading(true);
     try {
       if (mode === "login") {
-        await signIn(email, password);
+        const { user, session } = await signIn(email, password);
+        if (user || session) {
+          toastSuccess("ログインしました");
+          router.replace("/memos");
+          return;
+        }
+        // 失敗時は useAuthSubmit 側で toastError 済み
       } else {
-        await signUp(email, password);
+        const { user, session } = await signUp(email, password);
+        if (session || user) {
+          // メール確認OFFのプロジェクトはそのまま入れる
+          toastSuccess("サインアップに成功しました");
+          router.replace("/memos");
+        } else {
+          // メール確認ONの場合はセッションが無い
+          toastInfo("確認メールを送信しました", "メール内のリンクで有効化してください");
+        }
       }
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-4">
-      <div className="flex rounded-xl border p-1">
-        <button
-          className={`flex-1 rounded-lg px-3 py-2 text-sm ${
-            mode === "login" ? "bg-gray-100 font-semibold" : "hover:bg-gray-50"
-          }`}
-          onClick={() => setMode("login")}
-        >
-          ログイン
-        </button>
-        <button
-          className={`flex-1 rounded-lg px-3 py-2 text-sm ${
-            mode === "signup" ? "bg-gray-100 font-semibold" : "hover:bg-gray-50"
-          }`}
-          onClick={() => setMode("signup")}
-        >
-          サインアップ
-        </button>
+    <form onSubmit={onSubmit} className="mx-auto max-w-sm space-y-3 p-4">
+      <h1 className="text-xl font-semibold">{mode === "login" ? "ログイン" : "サインアップ"}</h1>
+      <input
+        className="w-full rounded border p-2"
+        placeholder="email@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        className="w-full rounded border p-2"
+        placeholder="••••••••"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit" disabled={loading} className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-60">
+        {loading ? "送信中…" : "送信"}
+      </button>
+      <div className="text-sm">
+        {mode === "login" ? (
+          <button type="button" className="underline" onClick={() => setMode("signup")}>
+            新規登録へ
+          </button>
+        ) : (
+          <button type="button" className="underline" onClick={() => setMode("login")}>
+            ログインへ
+          </button>
+        )}
       </div>
-
-      <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border p-4">
-        <div>
-          <label className="mb-1 block text-sm text-gray-600">メールアドレス</label>
-          <input
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            className="w-full rounded-xl border p-3 outline-none focus:ring"
-            placeholder="you@example.com"
-            required
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-gray-600">パスワード</label>
-          <input
-            type="password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.currentTarget.value)}
-            className="w-full rounded-xl border p-3 outline-none focus:ring"
-            placeholder="•••••••"
-            required
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {submitting ? "送信中..." : mode === "login" ? "ログイン" : "サインアップ"}
-        </button>
-
-        {mode === "signup" ? (
-          <p className="pt-1 text-xs text-gray-500">
-            登録後、メールの確認リンクからログインしてください。
-          </p>
-        ) : null}
-      </form>
-    </div>
+    </form>
   );
 }

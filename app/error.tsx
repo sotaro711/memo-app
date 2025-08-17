@@ -1,6 +1,8 @@
+// app/error.tsx
 "use client";
-import React, { useEffect } from "react";
-import { ToastProvider, useToast } from "../components/Toast";
+import React from "react";
+import Link from "next/link";
+import { ToastProvider } from "../components/Toast";
 
 export default function GlobalError({
   error,
@@ -9,64 +11,26 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // グローバルエラーは layout をバイパスするため、ここでも Provider を張る
   return (
-    <html lang="ja">
-      <body className="min-h-dvh bg-white text-gray-900 antialiased">
-        <ToastProvider>
-          <ErrorBody error={error} reset={reset} />
-        </ToastProvider>
-        <div id="toast-root" />
+    <html>
+      <body>
+        <ToastProvider />
+        <main className="mx-auto max-w-lg p-6 space-y-4">
+          <h2 className="text-xl font-semibold">エラーが発生しました</h2>
+          <p className="text-sm text-slate-600">{error?.message ?? "Unknown error"}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => reset()}
+              className="rounded bg-blue-600 px-4 py-2 text-white"
+            >
+              再試行
+            </button>
+            <Link href="/memos" className="underline">
+              一覧へ戻る
+            </Link>
+          </div>
+        </main>
       </body>
     </html>
-  );
-}
-
-function ErrorBody({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  const { error: pushError } = useToast();
-  useEffect(() => {
-    // 開発中はメッセージも出す（本番はタイトルのみなどに調整可）
-    pushError(
-      "エラーが発生しました",
-      process.env.NODE_ENV === "development" ? error.message : undefined,
-      5000
-    );
-    // デバッグ用ログ
-    // eslint-disable-next-line no-console
-    console.error(error);
-  }, [error, pushError]);
-
-  return (
-    <div className="mx-auto max-w-xl p-6 space-y-4">
-      <h1 className="text-2xl font-bold">問題が発生しました</h1>
-      <p className="text-gray-600">
-        一時的な問題の可能性があります。再試行をお試しください。
-      </p>
-      <div className="flex gap-3">
-        <button
-          onClick={reset}
-          className="rounded-xl border px-4 py-2 hover:bg-gray-50"
-        >
-          再試行
-        </button>
-        <a
-          href="/memos"
-          className="rounded-xl border px-4 py-2 hover:bg-gray-50"
-        >
-          メモ一覧へ戻る
-        </a>
-      </div>
-      {process.env.NODE_ENV === "development" ? (
-        <pre className="whitespace-pre-wrap rounded-xl bg-gray-50 p-3 text-sm text-gray-700">
-          {String(error.stack || error.message)}
-        </pre>
-      ) : null}
-    </div>
   );
 }

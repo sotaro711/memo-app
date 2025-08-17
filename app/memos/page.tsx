@@ -1,10 +1,11 @@
+// app/memos/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import SearchBar from '@/components/SearchBar';
-import { useToast } from '@/components/Toast';
+import { toastError } from '@/components/Toast';
 
 type MemoListItem = {
   id: string;
@@ -14,17 +15,20 @@ type MemoListItem = {
 };
 
 export default function MemosPage() {
-  const { error: toastError } = useToast();
   const [query, setQuery] = useState('');
   const [memos, setMemos] = useState<MemoListItem[] | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchMemos = async (q: string) => {
+  // 失敗トースト「1回だけ」制御
+  const lastToastAtRef = useRef(0);
+  const reqSeqRef = useRef(0);
+
+  const fetchMemos = useCallback(async (q: string) => {
+    const seq = ++reqSeqRef.current;
     setLoading(true);
     try {
       // タイトル or 本文に部分一致（大文字小文字無視）
-      // Supabaseの or フィルタはカンマ区切りで条件を列挙
-      const like = `%${q.replace(/%/g, '').replace(/_/g, '')}%`;
+      const like = `%${q.replace(/[%_]/g, '')}%`;
       let req = supabase
         .from('memos')
         .select('id,title,content,updated_at')
@@ -35,25 +39,34 @@ export default function MemosPage() {
       }
 
       const { data, error } = await req;
+      if (seq !== reqSeqRef.current) return; // 最新リクエストのみ反映
       if (error) throw error;
+
       setMemos(data ?? []);
     } catch (err) {
-      console.error(err);
-      const msg = err instanceof Error ? err.message : undefined;
-      toastError('メモの取得に失敗しました', msg);
-      setMemos([]);
+      if (seq === reqSeqRef.current) {
+        const now = Date.now();
+        if (now - lastToastAtRef.current > 2000) {
+          lastToastAtRef.current = now;
+          const msg = err instanceof Error ? err.message : undefined;
+          toastError('メモの取得に失敗しました', msg);
+        }
+        setMemos([]);
+      }
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchMemos('');
   }, []);
 
+  // 初回
+  useEffect(() => {
+    fetchMemos('');
+  }, [fetchMemos]);
+
+  // 検索
   useEffect(() => {
     fetchMemos(query);
-  }, [query]);
+  }, [query, fetchMemos]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -61,7 +74,7 @@ export default function MemosPage() {
         <h1 className="text-2xl font-bold">あなたのメモ</h1>
         <Link
           href="/memos/new"
-          className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          className="rounded-2xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
         >
           新規作成
         </Link>

@@ -1,26 +1,28 @@
+// components/DevNetworkHint.tsx
 "use client";
 import { useEffect, useState } from "react";
 
+const IS_DEV = process.env.NODE_ENV !== "production";
+
 export default function DevNetworkHint() {
-  if (process.env.NODE_ENV !== "development") return null;
-  const [online, setOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
+  const [online, setOnline] = useState<boolean>(true);
+
   useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setOnline(navigator.onLine);
     return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
-  if (online) return null;
+
+  if (!IS_DEV) return null; // ← 条件分岐はレンダリングで。Hookは常に上で呼ぶ
   return (
-    <div className="fixed top-4 right-4 z-[70] rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 shadow">
-      DevTools の Network が <b>Offline</b> か回線が切断されています。<br />
-      検証が終わったら <b>No throttling（Online）</b> に戻してください。
+    <div className="fixed bottom-3 left-3 rounded bg-black/70 px-3 py-1 text-xs text-white">
+      {online ? "Online" : "Offline（DevToolsで切替中）"}
     </div>
   );
 }

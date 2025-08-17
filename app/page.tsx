@@ -1,6 +1,2 @@
-'use client'
-import { useEffect } from 'react'
-export default function Home() {
-  useEffect(()=>{ location.href='/memos' },[])
-  return null
-}
+import { redirect } from 'next/navigation';
+export default function Home() { redirect('/memos'); }

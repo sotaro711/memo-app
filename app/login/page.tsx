@@ -1,5 +1,3 @@
-import AuthForm from '@/components/AuthForm'
-
-export default function Page() {
-  return <main className="p-6"><AuthForm/></main>
-}
+'use client';
+import AuthForm from '@/components/AuthForm';
+export default function LoginPage() { return <AuthForm />; }
